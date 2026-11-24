@@ -164,4 +164,115 @@ const KEYS = ['claudia','danila','simone','helen'];
 const NOME = {claudia:'Cláudia',danila:'Danila',simone:'Simone',helen:'Helen'};
 const COR = {claudia:'var(--a0)',danila:'var(--a1)',simone:'var(--a2)',helen:'var(--a3)'};
 const HEX = {claudia:'#1D4E89',danila:'#D47A1F',simone:'#2A9D8F',helen:'#A23B72'};
-const DES = [['Finalizou a regulação','#2E7D4F'],['Encaminhou para outra etapa','#3D7CC4'],['Pediu documentos','#E0A030'],['Dispensou a
+const DES = [['Finalizou a regulação','#2E7D4F'],['Encaminhou para outra etapa','#3D7CC4'],['Pediu documentos','#E0A030'],['Dispensou a tarefa','#C0504D'],['Sem conclusão registrada','#A9B2BA']];
+const PER = [['todos','Jul a nov (tudo)'],['2026-07','Julho'],['2026-08','Agosto'],['2026-09','Setembro'],['2026-10','Outubro'],['2026-11','Novembro*']];
+const MES = {'2026-07':'jul','2026-08':'ago','2026-09':'set','2026-10':'out','2026-11':'nov'};
+const st = {per:'todos', on:{claudia:true,danila:true,simone:true,helen:true}, evo:'media', sort:{}};
+const nf = (v,d=1)=> v==null||isNaN(v) ? '—' : v.toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const ni = v => v==null ? '—' : v.toLocaleString('pt-BR');
+const np = v => v==null ? '—' : nf(v)+'%';
+const NS='http://www.w3.org/2000/svg';
+function el(tag,attrs={},parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+function h(tag,attrs={},text){const e=document.createElement(tag);for(const k in attrs){if(k==='style')e.style.cssText=attrs[k];else e.setAttribute(k,attrs[k]);}if(text!=null)e.textContent=text;return e;}
+const cur = () => DATA.periodos[st.per];
+const ativos = () => KEYS.filter(k=>st.on[k] && cur()[k]);
+
+// controles
+const pc=document.getElementById('periodos');
+PER.forEach(([v,l])=>{const b=h('button',{class:'chip','aria-pressed':String(v===st.per)},l);b.onclick=()=>{st.per=v;pc.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));render();};pc.appendChild(b);});
+const wc=document.getElementById('who');
+KEYS.forEach(k=>{const b=h('button',{class:'chip','aria-pressed':'true'});const i=h('i');i.style.background=HEX[k];b.appendChild(i);b.appendChild(document.createTextNode(NOME[k]));b.onclick=()=>{const on=Object.values(st.on).filter(Boolean).length;if(st.on[k]&&on===1)return;st.on[k]=!st.on[k];b.setAttribute('aria-pressed',String(st.on[k]));render();};wc.appendChild(b);});
+document.querySelectorAll('#segEvo button').forEach(b=>b.onclick=()=>{st.evo=b.dataset.v;document.querySelectorAll('#segEvo button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));drawEvo();});
+
+function lead(){
+  const c=cur(),ks=ativos();
+  const top=(f)=>ks.reduce((a,b)=>c[b][f]>c[a][f]?b:a,ks[0]);
+  const p=document.getElementById('lead');p.replaceChildren();
+  const tD=top('media'),tH=top('phora'),tF=top('pfin');
+  const add=(t,b)=>{if(b){const x=h('b',{},t);p.appendChild(x);}else p.appendChild(document.createTextNode(t));};
+  add(NOME[tD],1);add(` tem a maior média de tarefas por dia trabalhado (${nf(c[tD].media)}). Por hora ativa, quem lidera é `);add(NOME[tH],1);add(` (${nf(c[tH].phora)} tarefas por hora). Quem mais finaliza o que assume é `);add(NOME[tF],1);add(` (${np(c[tF].pfin)}).`);
+}
+function people(){
+  const box=document.getElementById('people');box.replaceChildren();const c=cur();
+  ativos().forEach(k=>{const r=c[k];const d=h('div',{class:'person'});d.style.setProperty('--c',HEX[k]);
+    d.appendChild(h('h3',{},NOME[k]));
+    const big=h('div',{class:'big'},nf(r.media));big.appendChild(h('small',{},'tarefas por dia trabalhado'));d.appendChild(big);
+    const dl=h('dl');[['Tarefas por hora ativa',nf(r.phora)],['Tarefas assumidas',ni(r.tarefas)],['Regulações finalizadas',np(r.pfin)],['Encaminhadas',np(r.penc)],['Dias trabalhados',ni(r.dias)],['Tempo mediano por tarefa',nf(r.med)+' min'],['Período',r.ini+' a '+r.fim]].forEach(([a,b])=>{dl.appendChild(h('dt',{},a));dl.appendChild(h('dd',{},b));});
+    d.appendChild(dl);box.appendChild(d);});
+}
+
+function lineChart(box,{xs,xl,series,yfmt,tipHead,tipVal,H=260}){
+  box.replaceChildren();
+  const W=Math.max(300,box.clientWidth||700),m={t:14,r:14,b:30,l:44};
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'},box);
+  const all=series.flatMap(s=>s.vals).filter(v=>v!=null&&!isNaN(v));
+  const mx=Math.max(1,...all),raw=mx/4,mag=Math.pow(10,Math.floor(Math.log10(raw))),nn=raw/mag,step=(nn<=1?1:nn<=2?2:nn<=2.5?2.5:nn<=5?5:10)*mag,ymax=Math.ceil(mx*1.05/step)*step,nt=Math.round(ymax/step);
+  const x=i=>m.l+(xs.length===1?0.5:i/(xs.length-1))*(W-m.l-m.r), y=v=>H-m.b-(v/ymax)*(H-m.t-m.b);
+  for(let i=0;i<=nt;i++){const v=step*i;el('line',{x1:m.l,x2:W-m.r,y1:y(v),y2:y(v),stroke:'#E4E9ED'},svg);const t=el('text',{x:m.l-6,y:y(v)+4,'text-anchor':'end'},svg);t.textContent=yfmt(v);}
+  const every=W<520&&xs.length>9?3:1;
+  xs.forEach((v,i)=>{if(i%every)return;const t=el('text',{x:x(i),y:H-m.b+18,'text-anchor':'middle'},svg);t.textContent=xl(v);});
+  series.forEach(s=>{let d='',pen=false;s.vals.forEach((v,i)=>{if(v==null||isNaN(v)){pen=false;return;}d+=(pen?'L':'M')+x(i)+' '+y(v);pen=true;});
+    el('path',{d,fill:'none',stroke:s.color,'stroke-width':2.2},svg);
+    s.vals.forEach((v,i)=>{if(v!=null&&!isNaN(v))el('circle',{cx:x(i),cy:y(v),r:3.5,fill:s.color},svg);});});
+  const guide=el('line',{y1:m.t,y2:H-m.b,stroke:'#B8C4CE','stroke-dasharray':'3 3',visibility:'hidden'},svg);
+  const tip=h('div',{class:'tip'});tip.hidden=true;box.appendChild(tip);
+  const ov=el('rect',{x:m.l,y:m.t,width:W-m.l-m.r,height:H-m.t-m.b,fill:'transparent'},svg);
+  const move=(ev)=>{const rc=svg.getBoundingClientRect();const px=(ev.clientX-rc.left)*W/rc.width;let bi=0,bd=1e9;xs.forEach((_,i)=>{const dd=Math.abs(x(i)-px);if(dd<bd){bd=dd;bi=i;}});
+    guide.setAttribute('x1',x(bi));guide.setAttribute('x2',x(bi));guide.setAttribute('visibility','visible');
+    tip.replaceChildren(h('div',{class:'h'},tipHead(xs[bi])));
+    series.forEach(s=>{const r=h('div');const i=h('i');i.style.background=s.color;r.appendChild(i);r.appendChild(document.createTextNode(s.name+': '+tipVal(s,bi)));tip.appendChild(r);});
+    tip.hidden=false;const sx=x(bi)*rc.width/W;let left=sx+14;if(left+tip.offsetWidth>box.clientWidth)left=sx-tip.offsetWidth-14;tip.style.left=Math.max(0,left)+'px';tip.style.top='4px';};
+  ov.addEventListener('pointermove',move);ov.addEventListener('pointerdown',move);ov.addEventListener('pointerleave',()=>{tip.hidden=true;guide.setAttribute('visibility','hidden');});
+}
+function drawEvo(){
+  const ms=Object.keys(MES),f=st.evo;
+  lineChart(document.getElementById('chEvo'),{xs:ms,xl:v=>MES[v],
+    series:KEYS.filter(k=>st.on[k]).map(k=>({name:NOME[k],color:HEX[k],k,vals:DATA.serie[k].map(r=>r[f])})),
+    yfmt:v=>f==='tarefas'?ni(Math.round(v)):nf(v,v%1?1:0),tipHead:v=>MES[v]+'/2026'+(v==='2026-11'?' (até 24/11)':''),
+    tipVal:(s,i)=>{const r=DATA.serie[s.k][i];if(!r.tarefas)return 'sem atividade';return f==='media'?`${nf(r.media)} por dia (${ni(r.tarefas)} em ${r.dias} dias)`:f==='phora'?`${nf(r.phora)} por hora (${ni(r.tarefas)} em ${r.horas} h)`:`${ni(r.tarefas)} tarefas`;}});
+}
+function drawDes(){
+  const lg=document.getElementById('legDes');lg.replaceChildren();DES.forEach(([n,c])=>{const s=h('span');const i=h('i');i.style.background=c;s.appendChild(i);s.appendChild(document.createTextNode(n));lg.appendChild(s);});
+  const box=document.getElementById('chDes');box.replaceChildren();const c=cur(),ks=ativos();
+  const W=Math.max(300,box.clientWidth||700),rh=40,m={l:70,r:10,t:4},H=m.t+rh*ks.length+4;
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img','aria-label':'Barras com como terminam as tarefas de cada analista'},box);
+  const tip=h('div',{class:'tip'});tip.hidden=true;box.appendChild(tip);
+  const x=v=>m.l+v/100*(W-m.l-m.r);
+  ks.forEach((k,i)=>{const y0=m.t+i*rh;const t=el('text',{x:0,y:y0+rh/2+4},svg);t.textContent=NOME[k];
+    let acc=0;c[k].des.forEach(([n,p],j)=>{const w=x(acc+p)-x(acc);
+      const r=el('rect',{x:x(acc),y:y0+6,width:Math.max(0,w),height:rh-12,fill:DES[j][1]},svg);
+      if(w>38){const tt=el('text',{x:x(acc)+w/2,y:y0+rh/2+4,'text-anchor':'middle'},svg);tt.textContent=nf(p)+'%';tt.style.fill='#fff';tt.style.fontWeight='600';}
+      const show=(ev)=>{tip.replaceChildren(h('div',{class:'h'},NOME[k]));const d=h('div');const ii=h('i');ii.style.background=DES[j][1];d.appendChild(ii);d.appendChild(document.createTextNode(`${DES[j][0]}: ${np(p)} (${ni(n)} de ${ni(c[k].tarefas)})`));tip.appendChild(d);tip.hidden=false;
+        const rc=box.getBoundingClientRect();let left=ev.clientX-rc.left+12;if(left+tip.offsetWidth>box.clientWidth)left=ev.clientX-rc.left-tip.offsetWidth-12;tip.style.left=Math.max(0,left)+'px';tip.style.top=Math.max(0,ev.clientY-rc.top-44)+'px';};
+      r.addEventListener('pointermove',show);r.addEventListener('pointerdown',show);r.addEventListener('pointerleave',()=>tip.hidden=true);
+      acc+=p;});});
+  table('tbDes',[{t:'Analista',k:'nome'},...DES.map(([n],j)=>({t:n,v:r=>r.des[j][1],f:np,sub:r=>ni(r.des[j][0])}))],ks.map(k=>({...c[k],nome:NOME[k],key:k})));
+}
+function table(id,cols,rows,opt={}){
+  const tb=document.getElementById(id);tb.replaceChildren();
+  const s=st.sort[id];if(s){const col=cols[s.i];const val=r=>col.v?col.v(r):r[col.k];rows=rows.slice().sort((a,b)=>{const A=val(a),B=val(b);return (A>B?1:A<B?-1:0)*(s.dir==='ascending'?1:-1);});}
+  const th=h('thead'),tr=h('tr');cols.forEach((c,i)=>{const t=h('th');if(s&&s.i===i)t.setAttribute('aria-sort',s.dir);const b=h('button',{},c.t);b.onclick=()=>{const p=st.sort[id];st.sort[id]={i,dir:p&&p.i===i&&p.dir==='descending'?'ascending':'descending'};render();};t.appendChild(b);tr.appendChild(t);});th.appendChild(tr);tb.appendChild(th);
+  const bd=h('tbody');const max={};cols.forEach((c,i)=>{if(opt.heat&&i>0)max[i]=Math.max(1,...rows.map(r=>c.v?c.v(r):r[c.k]).filter(v=>v!=null));});
+  rows.forEach(r=>{const tr=h('tr');cols.forEach((c,i)=>{const v=c.v?c.v(r):r[c.k];const td=h('td');
+    if(i===0&&r.key){const sw=h('span',{class:'sw'});sw.style.background=HEX[r.key];td.appendChild(sw);td.appendChild(document.createTextNode(v));}
+    else{td.textContent=c.f?c.f(v):v;if(c.sub){const sm=h('span',{style:'color:var(--mute);font-size:11px;margin-left:5px'},'('+c.sub(r)+')');td.appendChild(sm);}}
+    if(opt.heat&&i>0&&v!=null){const a=Math.min(1,v/max[i]);td.style.background=`rgba(29,78,137,${(a*0.55).toFixed(3)})`;if(a>0.6)td.style.color='#fff';}
+    tr.appendChild(td);});bd.appendChild(tr);});tb.appendChild(bd);
+}
+function render(){
+  const c=cur(),ks=ativos(),rows=ks.map(k=>({...c[k],nome:NOME[k],key:k}));
+  lead();people();drawEvo();drawDes();
+  table('tbRitmo',[{t:'Analista',k:'nome'},{t:'Tarefas',k:'tarefas',f:ni},{t:'Horas ativas',k:'horas',f:ni},{t:'Tarefas por hora ativa',k:'phora',f:nf},{t:'Tarefas por dia',k:'media',f:nf},{t:'Finalizadas por dia',k:'findia',f:nf},{t:'Encaminhadas',k:'enc',f:ni},{t:'Abertas por mais de 4 h',k:'ab',f:ni},{t:'% abertas por mais de 4 h',k:'pab',f:np},{t:'Dispensadas',k:'disp',f:ni},{t:'% dispensadas',k:'pdisp',f:np},{t:'Tempo mediano (min)',k:'med',f:nf}],rows);
+  table('tbPadrao',[{t:'Analista',k:'nome'},{t:'Tarefas com negativa',k:'cneg',f:ni},{t:'% com negativa',k:'pneg',f:np},{t:'Procedimentos negados',k:'neg',f:ni},{t:'Procedimentos autorizados',k:'aut',f:ni},{t:'Pediu documentos',k:'cdoc',f:ni},{t:'% pediu documentos',k:'pdoc',f:np}],rows);
+  const mix=(id,cats,campo,titulo)=>table(id,[{t:titulo,k:'cat'},...ks.map(k=>({t:NOME[k],k,f:np}))],cats.map((cn,i)=>{const r={cat:cn};ks.forEach(k=>r[k]=c[k][campo][i][1]);return r;}),{heat:true});
+  mix('tbSol',DATA.cs,'sol','Tipo de solicitação');mix('tbEta',DATA.ce,'eta','Etapa do fluxo');
+  const HS=[...Array(18).keys()].map(i=>i+6);
+  lineChart(document.getElementById('chHora'),{xs:HS,xl:v=>v+'h',series:ks.map(k=>({name:NOME[k],color:HEX[k],k,vals:HS.map(hh=>c[k].hora[hh][1])})),yfmt:v=>nf(v,0)+'%',tipHead:v=>v+'h às '+v+'h59',tipVal:(s,i)=>{const x=c[s.k].hora[HS[i]];return np(x[1])+' ('+ni(x[0])+')';},H:230});
+  const WD=['seg','ter','qua','qui','sex','sáb','dom'];
+  lineChart(document.getElementById('chSem'),{xs:WD.map((_,i)=>i),xl:i=>WD[i],series:ks.map(k=>({name:NOME[k],color:HEX[k],k,vals:c[k].sem.map(x=>x[0])})),yfmt:v=>nf(v,0),tipHead:i=>WD[i],tipVal:(s,i)=>{const x=c[s.k].sem[i];return x[0]==null?'sem atividade':nf(x[0])+' por dia ('+x[1]+' dias)';},H:230});
+}
+render();
+let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(render,150);});
+</script>
+</body>
+</html>
